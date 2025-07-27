@@ -356,6 +356,44 @@ st.markdown("""
             100% { left: 100%; }
         }
         
+        /* Sidebar enhancements */
+        .css-1d391kg {
+            background: linear-gradient(180deg, var(--dark-bg) 0%, var(--darker-bg) 100%);
+        }
+        
+        .sidebar .sidebar-content {
+            background: linear-gradient(180deg, var(--dark-bg) 0%, var(--darker-bg) 100%);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            padding: 20px;
+            border-right: 3px solid var(--primary-navy);
+            height: 100vh;
+            overflow-y: auto;
+        }
+        
+        /* Form controls styling */
+        .stSelectbox > div > div {
+            background-color: var(--darker-bg) !important;
+            border: 2px solid var(--primary-navy) !important;
+            border-radius: 8px !important;
+            color: var(--text-primary) !important;
+        }
+        
+        .stSelectbox > div > div > div {
+            color: var(--text-primary) !important;
+        }
+        
+        .stNumberInput > div > div > input {
+            background-color: var(--darker-bg) !important;
+            border: 2px solid var(--primary-navy) !important;
+            border-radius: 8px !important;
+            color: var(--text-primary) !important;
+        }
+        
+        .stSlider > div > div > div {
+            background-color: var(--primary-navy) !important;
+        }
+        
         /* Enhanced button styling */
         .stButton > button {
             background: var(--gradient-bg) !important;
@@ -403,7 +441,7 @@ st.markdown("""
             background: var(--gradient-bg);
         }
         
-        /* Description section styling */
+        /* Description section styling - FIXED FOR VISIBILITY */
         .description-section {
             background: linear-gradient(135deg, var(--darker-bg) 0%, var(--dark-bg) 100%);
             border-radius: 12px;
@@ -411,6 +449,31 @@ st.markdown("""
             margin: 20px 0;
             border-left: 4px solid var(--light-blue);
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Force white text color for all description content */
+        .description-section p {
+            color: #ffffff !important;
+            line-height: 1.7 !important;
+            font-size: 15px !important;
+            text-align: justify !important;
+            font-weight: 400 !important;
+        }
+        
+        /* Ensure all text in description section is visible */
+        .description-section * {
+            color: #ffffff !important;
+        }
+        
+        /* Specific class for AI description text */
+        .ai-description-text {
+            color: #ffffff !important;
+            line-height: 1.7 !important;
+            font-size: 15px !important;
+            text-align: justify !important;
+            font-weight: 400 !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
         
         /* Breakdown section */
@@ -426,6 +489,57 @@ st.markdown("""
         .breakdown-content {
             font-size: 13px;
             line-height: 1.5;
+            color: #e0e0e0 !important;
+        }
+        
+        /* Section heading styling */
+        .main h3 {
+            color: var(--light-blue);
+            font-size: 20px;
+            font-weight: 600;
+            margin: 20px 0 15px 0;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--primary-navy);
+        }
+        
+        /* Enhanced form control spacing */
+        .stSelectbox, .stNumberInput, .stSlider {
+            margin-bottom: 10px;
+        }
+        
+        /* Divider styling */
+        hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--primary-navy), transparent);
+            margin: 15px 0;
+        }
+        
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: var(--dark-bg);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary-navy);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-blue);
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .navy-ribbon {
+                margin: 0 -10px 20px -10px;
+                padding: 15px 20px;
+                font-size: 22px;
+            }
         }
     </style>
 """, unsafe_allow_html=True)
@@ -442,8 +556,8 @@ with st.sidebar:
     )
     st.markdown(
         """
-        <p class="justified-text">
-        This intelligent car price estimator uses advanced algorithms that consider market segments, brand positioning, depreciation curves, mileage patterns, and real-time market conditions.
+        <p class="justified-text" style="color: #e0e0e0; text-align: justify; line-height: 1.6; font-size: 14px;">
+        This intelligent car price estimator uses advanced algorithms that consider market segments, brand positioning, depreciation curves, mileage patterns, and real-time market conditions. The system analyzes similar vehicles, applies smart depreciation models, and factors in transmission type, import status, and fuel efficiency to provide accurate, market-aware pricing ranges.
         </p>
         """,
         unsafe_allow_html=True
@@ -472,7 +586,7 @@ def filter_string_models(models):
 # Input controls
 st.markdown("### 🔧 Vehicle Details")
 
-# First row
+# First row - Primary vehicle information
 row1_cols = st.columns([2, 2, 1.5, 1.8, 1.5])
 
 make_options = ["Select Make"] + sorted(df['make'].unique())
@@ -493,7 +607,7 @@ engine_cc = row1_cols[4].selectbox("Engine CC", engine_options, index=0)
 
 st.markdown("---")
 
-# Second row
+# Second row - Additional specifications
 row2_cols = st.columns([2, 2, 2, 2])
 
 fuel_options = ["Select Fuel Type"] + sorted(df['fuel_type'].dropna().unique())
@@ -508,7 +622,7 @@ assembled = row2_cols[3].selectbox("Assembled", ["Select Assembly", "Local", "Im
 popular_makes = ["toyota", "suzuki", "honda"]
 is_popular_make = 1 if make.lower() in popular_makes else 0
 
-# Submit button
+# Centered submit button
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     all_selected = (
@@ -522,7 +636,7 @@ with col2:
     )
     
     if all_selected:
-        submit_btn = st.button("🔍 Get Intelligent Price Analysis", key="submit_btn")
+        submit_btn = st.button("🔍 Get Intelligent Price Analysis", key="submit_btn", help="Advanced AI analysis with market intelligence")
     else:
         st.info("⚠️ Please select all vehicle details to get price analysis")
         submit_btn = False
@@ -588,7 +702,7 @@ if submit_btn:
             unsafe_allow_html=True
         )
         
-        # Price breakdown
+        # Price breakdown analysis
         base_price = calculate_base_price_by_segments(raw_input['make'], raw_input['model'], raw_input['engine_cc'], raw_input['age'])
         avg_annual_mileage = 15000
         expected_mileage = raw_input['age'] * avg_annual_mileage
