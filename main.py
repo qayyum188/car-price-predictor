@@ -12,7 +12,16 @@ import numpy as np
 load_dotenv()
 warnings.filterwarnings("ignore")
 
+# Debug API key loading
 api_key = st.secrets.get("GROQ_API_KEY", "")
+
+# DEBUG: Add this temporarily to see what's happening
+if api_key:
+    st.sidebar.success(f"✅ API Key loaded: {api_key[:10]}...{api_key[-4:]}")
+else:
+    st.sidebar.error("❌ No API key found in secrets")
+    st.sidebar.info("Check your Streamlit secrets configuration")
+
 # Load dataset
 df = pd.read_csv("pakwheels_used_cars.csv", encoding="utf-8")
 
@@ -237,6 +246,42 @@ def correct_input(user_input, choices, threshold=70):
     match, score = process.extractOne(user_input, choices)
     return match if score >= threshold else user_input
 
+# === AI Description function ===
+def generate_ai_description(raw_input, lower, upper, expected_mileage, api_key):
+    """Generate AI description using Groq API"""
+    try:
+        # Check if API key exists and is not empty
+        if not api_key or api_key.strip() == "":
+            return None, "API key is missing or empty"
+            
+        # Initialize Groq client
+        client = Groq(api_key=api_key.strip())
+        
+        prompt = (
+            f"You are an expert Pakistani car market analyst. Provide a detailed 5-6 line analysis of why a {2024 - raw_input['age']} "
+            f"{raw_input['make']} {raw_input['model']} ({raw_input['body']}) with {raw_input['mileage']:,} km mileage, "
+            f"{raw_input['engine_cc']}cc {raw_input['fuel_type']} engine, and "
+            f"{'automatic' if raw_input['is_automatic'] else 'manual'} transmission is intelligently valued between Rs. {lower:,} and Rs. {upper:,}. "
+            f"The expected mileage for this age would be {expected_mileage:,} km. "
+            f"Consider market positioning, demand trends, fuel efficiency, maintenance costs, and resale potential. "
+            f"Mention specific factors affecting this vehicle's pricing in Pakistan's current market."
+        )
+
+        response = client.chat.completions.create(
+            model="llama3-70b-8192",
+            messages=[
+                {"role": "system", "content": "You are a professional automotive market analyst specializing in Pakistan's used car market with deep knowledge of pricing trends, brand positioning, and consumer preferences."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+
+        return response.choices[0].message.content, None
+        
+    except Exception as e:
+        return None, str(e)
+
 # === Streamlit page config & style ===
 st.set_page_config(page_title="Car Price Estimator", layout="wide", initial_sidebar_state="expanded")
 
@@ -311,64 +356,6 @@ st.markdown("""
             100% { left: 100%; }
         }
         
-        /* Sidebar enhancements */
-        .css-1d391kg {
-            background: linear-gradient(180deg, var(--dark-bg) 0%, var(--darker-bg) 100%);
-        }
-        
-        .sidebar .sidebar-content {
-            background: linear-gradient(180deg, var(--dark-bg) 0%, var(--darker-bg) 100%);
-            color: var(--text-primary);
-            font-family: 'Inter', sans-serif;
-            padding: 20px;
-            border-right: 3px solid var(--primary-navy);
-            height: 100vh;
-            overflow-y: auto;
-        }
-        
-        /* Description box styling */
-        .description-header {
-            background: var(--gradient-bg);
-            
-            padding: 15px 20px;
-            border-radius: 10px;
-            font-weight: 600;
-            font-size: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(0, 31, 77, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .justified-text {
-            text-align: justify;
-            line-height: 1.6;
-            font-size: 14px;
-            color: var(--text-secondary);
-        }
-        
-        /* Form controls styling */
-        .stSelectbox > div > div {
-            background-color: var(--darker-bg) !important;
-            border: 2px solid var(--primary-navy) !important;
-            border-radius: 8px !important;
-            color: var(--text-primary) !important;
-        }
-        
-        .stSelectbox > div > div > div {
-            color: var(--text-primary) !important;
-        }
-        
-        .stNumberInput > div > div > input {
-            background-color: var(--darker-bg) !important;
-            border: 2px solid var(--primary-navy) !important;
-            border-radius: 8px !important;
-            color: var(--text-primary) !important;
-        }
-        
-        .stSlider > div > div > div {
-            background-color: var(--primary-navy) !important;
-        }
-        
         /* Enhanced button styling */
         .stButton > button {
             background: var(--gradient-bg) !important;
@@ -426,7 +413,7 @@ st.markdown("""
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
         }
         
-        /* Breakdown section - Made smaller */
+        /* Breakdown section */
         .breakdown-section {
             background: linear-gradient(135deg, var(--darker-bg) 0%, var(--dark-bg) 100%);
             border-radius: 8px;
@@ -440,60 +427,11 @@ st.markdown("""
             font-size: 13px;
             line-height: 1.5;
         }
-        
-        /* Section heading styling */
-        .main h3 {
-            color: var(--light-blue);
-            font-size: 20px;
-            font-weight: 600;
-            margin: 20px 0 15px 0;
-            padding-bottom: 8px;
-            border-bottom: 2px solid var(--primary-navy);
-        }
-        
-        /* Enhanced form control spacing */
-        .stSelectbox, .stNumberInput, .stSlider {
-            margin-bottom: 10px;
-        }
-        
-        /* Divider styling */
-        hr {
-            border: none;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, var(--primary-navy), transparent);
-            margin: 15px 0;
-        }
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: var(--dark-bg);
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: var(--primary-navy);
-            border-radius: 4px;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--accent-blue);
-        }
-        
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .navy-ribbon {
-                margin: 0 -10px 20px -10px;
-                padding: 15px 20px;
-                font-size: 22px;
-            }
-        }
     </style>
 """, unsafe_allow_html=True)
 
 # === Sidebar with project description ===
 with st.sidebar:
-   
     st.markdown(
         """
         <p style="font-size: 18px; font-weight: bold; color: #ffffff; margin-bottom: 10px;">
@@ -505,7 +443,7 @@ with st.sidebar:
     st.markdown(
         """
         <p class="justified-text">
-        This intelligent car price estimator uses advanced algorithms that consider market segments, brand positioning, depreciation curves, mileage patterns, and real-time market conditions. The system analyzes similar vehicles, applies smart depreciation models, and factors in transmission type, import status, and fuel efficiency to provide accurate, market-aware pricing ranges.
+        This intelligent car price estimator uses advanced algorithms that consider market segments, brand positioning, depreciation curves, mileage patterns, and real-time market conditions.
         </p>
         """,
         unsafe_allow_html=True
@@ -517,35 +455,29 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Input controls arranged in 2 rows with expanded widths
-st.markdown("### 🔧 Vehicle Details")
-
-# Filter out numeric values from model column - keep only string values
+# Filter out numeric values from model column
 def filter_string_models(models):
     """Filter out numeric values and keep only string model names"""
     string_models = []
     for model in models:
-        # Convert to string and check if it's not purely numeric
         model_str = str(model).strip()
         if not model_str.isdigit() and model_str.lower() not in ['nan', 'none', '']:
-            # Additional check to avoid float numbers like "1.0", "2.5" etc
             try:
                 float(model_str)
-                # If it converts to float successfully, it's numeric - skip it
                 continue
             except ValueError:
-                # If it can't convert to float, it's a proper string model name
                 string_models.append(model_str)
-    return sorted(list(set(string_models)))  # Remove duplicates and sort
+    return sorted(list(set(string_models)))
 
-# First row - Primary vehicle information
+# Input controls
+st.markdown("### 🔧 Vehicle Details")
+
+# First row
 row1_cols = st.columns([2, 2, 1.5, 1.8, 1.5])
 
-# Make selectbox with default "Select" option
 make_options = ["Select Make"] + sorted(df['make'].unique())
 make = row1_cols[0].selectbox("Make", make_options, index=0)
 
-# Model selectbox with default "Select" option - depends on make selection
 if make != "Select Make":
     filtered_models = filter_string_models(df['model'].dropna().unique())
     model_options = ["Select Model"] + filtered_models
@@ -556,20 +488,17 @@ model_input = row1_cols[1].selectbox("Model", model_options, index=0)
 age = row1_cols[2].slider("Age (years)", 0, 25, 5)
 mileage = row1_cols[3].number_input("Mileage (km)", min_value=0, value=50000, step=500)
 
-# Engine CC selectbox with default "Select" option
 engine_options = ["Select Engine CC"] + sorted([str(cc) for cc in df['engine_cc'].dropna().unique()])
 engine_cc = row1_cols[4].selectbox("Engine CC", engine_options, index=0)
 
 st.markdown("---")
 
-# Second row - Additional specifications
+# Second row
 row2_cols = st.columns([2, 2, 2, 2])
 
-# Fuel Type selectbox with default "Select" option
 fuel_options = ["Select Fuel Type"] + sorted(df['fuel_type'].dropna().unique())
 fuel_type = row2_cols[0].selectbox("Fuel Type", fuel_options, index=0)
 
-# Body Type selectbox with default "Select" option
 body_options = ["Select Body Type"] + sorted(df['body'].dropna().unique())
 body = row2_cols[1].selectbox("Body Type", body_options, index=0)
 
@@ -579,10 +508,9 @@ assembled = row2_cols[3].selectbox("Assembled", ["Select Assembly", "Local", "Im
 popular_makes = ["toyota", "suzuki", "honda"]
 is_popular_make = 1 if make.lower() in popular_makes else 0
 
-# Centered submit button - only show if all required fields are selected
+# Submit button
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    # Check if all required fields are selected
     all_selected = (
         make != "Select Make" and 
         model_input != "Select Model" and 
@@ -594,20 +522,18 @@ with col2:
     )
     
     if all_selected:
-        submit_btn = st.button("🔍 Get Intelligent Price Analysis", key="submit_btn", help="Advanced AI analysis with market intelligence")
+        submit_btn = st.button("🔍 Get Intelligent Price Analysis", key="submit_btn")
     else:
         st.info("⚠️ Please select all vehicle details to get price analysis")
         submit_btn = False
 
 if submit_btn:
-    # Show loading animation
     with st.spinner('Running advanced market analysis and AI algorithms...'):
         
-        # Convert engine_cc to integer safely
         try:
             engine_cc_value = int(float(engine_cc)) if engine_cc != "Select Engine CC" else 1000
         except ValueError:
-            engine_cc_value = 1000  # fallback if user enters bad value
+            engine_cc_value = 1000
         
         raw_input = {
             'make': correct_input(make, df['make'].unique()),
@@ -624,7 +550,7 @@ if submit_btn:
             'body': correct_input(body, df['body'].unique())
         }
         
-        # Use intelligent base calculation
+        # Calculate prices
         ml_predicted_price = calculate_base_price_by_segments(
             raw_input['make'], 
             raw_input['model'], 
@@ -632,10 +558,8 @@ if submit_btn:
             raw_input['age']
         )
 
-        # Use intelligent range calculation
         lower, upper = calculate_intelligent_range(raw_input, ml_predicted_price, df)
         
-        # Apply market condition factor
         market_factor = get_market_condition_factor(raw_input['make'], raw_input['model'], raw_input['age'])
         lower = int(lower * market_factor)
         upper = int(upper * market_factor)
@@ -646,7 +570,7 @@ if submit_btn:
         def format_k(n):
             return f"{n//1000}k"
 
-        # Enhanced price display
+        # Display price result
         st.markdown(
             f"""
             <div class="price-result">
@@ -664,12 +588,11 @@ if submit_btn:
             unsafe_allow_html=True
         )
         
-        # Price breakdown analysis - Check for required columns
+        # Price breakdown
         base_price = calculate_base_price_by_segments(raw_input['make'], raw_input['model'], raw_input['engine_cc'], raw_input['age'])
         avg_annual_mileage = 15000
         expected_mileage = raw_input['age'] * avg_annual_mileage
         
-        # Check what columns are available in the dataset
         available_columns = list(df.columns)
         has_price_col = 'price' in available_columns
         
@@ -694,37 +617,29 @@ if submit_btn:
             unsafe_allow_html=True
         )
 
-        # Enhanced AI Description generation
-        try:
-            # Check if API key is properly set
-            if not api_key or api_key.strip() == "":
-                raise ValueError("GROQ_API_KEY is not set or empty")
-                
-            prompt = (
-                f"You are an expert Pakistani car market analyst. Provide a detailed 5-6 line analysis of why a {2024 - raw_input['age']} "
-                f"{raw_input['make']} {raw_input['model']} ({raw_input['body']}) with {raw_input['mileage']:,} km mileage, "
-                f"{raw_input['engine_cc']}cc {raw_input['fuel_type']} engine, and "
-                f"{'automatic' if raw_input['is_automatic'] else 'manual'} transmission is intelligently valued between Rs. {lower:,} and Rs. {upper:,}. "
-                f"The expected mileage for this age would be {expected_mileage:,} km. "
-                f"Consider market positioning, demand trends, fuel efficiency, maintenance costs, and resale potential. "
-                f"Mention specific factors affecting this vehicle's pricing in Pakistan's current market."
+        # AI Description generation
+        description, error = generate_ai_description(raw_input, lower, upper, expected_mileage, api_key)
+        
+        if description:
+            # Display AI-generated description
+            st.markdown(
+                f"""
+                <div class="description-section">
+                    <h3 style='color: #00aaff; margin-bottom: 15px;'>
+                      📑 AI Market Valuation Report
+                    </h3>
+                    <p style='color: #e0e0e0; line-height: 1.7; font-size: 15px;'>
+                        {description}
+                    </p>
+                </div>
+                """, 
+                unsafe_allow_html=True
             )
-
-            client = Groq(api_key=api_key)
-            response = client.chat.completions.create(
-                model="llama3-70b-8192",
-                messages=[
-                    {"role": "system", "content": "You are a professional automotive market analyst specializing in Pakistan's used car market with deep knowledge of pricing trends, brand positioning, and consumer preferences."},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-
-            description = response.choices[0].message.content
+        else:
+            # Show error details and fallback
+            st.warning(f"🤖 AI Description unavailable: {error}")
             
-        except Exception as e:
-            st.info("💡 To enable AI descriptions, set your GROQ_API_KEY in the .env file")
-            
-            # Enhanced fallback description based on actual input
+            # Enhanced fallback description
             segment = 'Luxury' if raw_input['make'].lower() in ['mercedes', 'bmw', 'audi', 'lexus', 'bentley'] else 'Premium' if raw_input['make'].lower() in ['toyota', 'honda', 'nissan'] else 'Economy'
             
             efficiency_desc = 'excellent fuel efficiency' if raw_input['engine_cc'] < 1500 else 'balanced performance and efficiency' if raw_input['engine_cc'] <= 2000 else 'strong performance characteristics'
@@ -733,7 +648,7 @@ if submit_btn:
             
             transmission_benefit = 'convenience and smooth driving experience' if raw_input['is_automatic'] else 'better fuel economy and lower maintenance costs'
             
-            description = f"""
+            fallback_description = f"""
             This {2024 - raw_input['age']} {raw_input['make']} {raw_input['model']} represents a solid choice in the {segment.lower()} segment of Pakistan's used car market. 
             The {raw_input['engine_cc']}cc {raw_input['fuel_type']} engine offers {efficiency_desc}, making it suitable for both city and highway driving. 
             With {mileage_status} at {raw_input['mileage']:,} km, this vehicle shows {'excellent' if mileage_status == 'low mileage' else 'reasonable'} usage patterns for its age. 
@@ -742,17 +657,16 @@ if submit_btn:
             positioning it competitively within the Rs. {lower//1000}k-{upper//1000}k price range based on similar vehicles in the market.
             """
         
-        # Enhanced description display
-        st.markdown(
-            f"""
-            <div class="description-section">
-                <h3 style='color: #00aaff; margin-bottom: 15px;'>
-                  📑 Market Valuation Report
-                </h3>
-                <p style='color: #e0e0e0; line-height: 1.7; font-size: 15px;'>
-                    {description}
-                </p>
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
+            st.markdown(
+                f"""
+                <div class="description-section">
+                    <h3 style='color: #00aaff; margin-bottom: 15px;'>
+                      📑 Market Valuation Report
+                    </h3>
+                    <p style='color: #e0e0e0; line-height: 1.7; font-size: 15px;'>
+                        {fallback_description}
+                    </p>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
