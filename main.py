@@ -15,12 +15,6 @@ warnings.filterwarnings("ignore")
 # Debug API key loading
 api_key = st.secrets.get("GROQ_API_KEY", "")
 
-# DEBUG: Add this temporarily to see what's happening
-if api_key:
-    st.sidebar.success(f"✅ API Key loaded: {api_key[:10]}...{api_key[-4:]}")
-else:
-    st.sidebar.error("❌ No API key found in secrets")
-    st.sidebar.info("Check your Streamlit secrets configuration")
 
 # Load dataset
 df = pd.read_csv("pakwheels_used_cars.csv", encoding="utf-8")
