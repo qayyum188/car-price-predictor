@@ -18,16 +18,23 @@ if not api_key:
 
 # === Load model and encoders ===
 import gdown
+import joblib
 import os
 
 @st.cache_resource
 def load_model_and_encoders():
-    model_url = "https://drive.google.com/uc?id=1RmP52eB544KHpKHknWyGkRQrMayljrOU"
-    encoders_url = "https://drive.google.com/uc?id=1RrEf0Ek35N2YZlAvHKoDg36j9nKXRSLG"
+    # File IDs from Google Drive
+    model_file_id = "1RmP52eB544KHpKHknWyGkRQrMayljrOU"
+    encoders_file_id = "1RmP52eB544KHpKHknWyGkRQrMayljrOU"
 
+    model_url = f"https://drive.google.com/uc?id={model_file_id}"
+    encoders_url = f"https://drive.google.com/uc?id={encoders_file_id}"
+
+    # Define local paths
     model_path = "optimized_car_model.pkl"
-    encoders_path = "label_encoders 15.pkl"
+    encoders_path = "label_encoders_15.pkl"
 
+    # Download files if not present
     if not os.path.exists(model_path):
         gdown.download(model_url, model_path, quiet=False)
     if not os.path.exists(encoders_path):
@@ -35,11 +42,13 @@ def load_model_and_encoders():
 
     model = joblib.load(model_path)
     encoders = joblib.load(encoders_path)
+
     return model, encoders
 
 model, encoders = load_model_and_encoders()
 
-df = pd.read_csv("pakwheels_used_cars.csv")
+
+df = pd.read_csv("pakwheels_used_cars.csv", encoding="utf-8")
 
 # === Intelligent Price Calculation Functions ===
 def calculate_base_price_by_segments(make, model_name, engine_cc, age):
@@ -648,20 +657,132 @@ if submit_btn:
             'fuel_type': correct_input(fuel_type, df['fuel_type'].unique()),
             'body': correct_input(body, df['body'].unique())
         }
+        
+        # Debug: Display encoders type and structure
+        st.write("Type of encoders:", type(encoders))
+        st.write("Encoders structure:", str(encoders)[:200] + "..." if len(str(encoders)) > 200 else str(encoders))
 
-
-        # Encode input for ML model
+        # Enhanced encoder handling
         encoded_input = raw_input.copy()
-        for key in encoders:
-            if key in encoded_input:
-                val = encoded_input[key]
-                le = encoders[key]
-                if val not in le.classes_:
-                    val = le.classes_[0]
-                encoded_input[key] = le.transform([val])[0]
+        
+        try:
+            # Handle different encoder formats
+            if isinstance(encoders, dict):
+                # Case 1: encoders is a dictionary
+                for key in encoders.keys():
+                    if key in encoded_input:
+                        val = encoded_input[key]
+                        le = encoders[key]
+                        
+                        # Check if the encoder has classes_ attribute
+                        if hasattr(le, 'classes_'):
+                            if val not in le.classes_:
+                                # Use the first class as fallback
+                                val = le.classes_[0]
+                            encoded_input[key] = le.transform([val])[0]
+                        else:
+                            st.warning(f"Encoder for '{key}' doesn't have classes_ attribute")
+                            
+            elif hasattr(encoders, '__dict__'):
+                # Case 2: encoders is an object with attributes
+                encoder_dict = encoders.__dict__
+                for key in encoder_dict.keys():
+                    if key in encoded_input:
+                        val = encoded_input[key]
+                        le = encoder_dict[key]
+                        
+                        if hasattr(le, 'classes_'):
+                            if val not in le.classes_:
+                                val = le.classes_[0]
+                            encoded_input[key] = le.transform([val])[0]
+                            
+            elif hasattr(encoders, 'items'):
+                # Case 3: encoders supports items() method
+                for key, le in encoders.items():
+                    if key in encoded_input:
+                        val = encoded_input[key]
+                        
+                        if hasattr(le, 'classes_'):
+                            if val not in le.classes_:
+                                val = le.classes_[0]
+                            encoded_input[key] = le.transform([val])[0]
+                            
+            else:
+                # Case 4: Fallback - try to extract encoders differently
+                st.error(f"Unsupported encoder format: {type(encoders)}")
+                st.error("Please check your label_encoders_15.pkl file format")
+                st.stop()
+                
+        except Exception as e:
+            st.error(f"Error during encoding: {str(e)}")
+            st.error("Using fallback encoding method...")
+            
+            # Fallback: Create simple numeric encodings
+            categorical_features = ['make', 'model', 'fuel_type', 'body']
+            for feature in categorical_features:
+                if feature in encoded_input:
+                    # Simple hash-based encoding as fallback
+                    encoded_input[feature] = hash(str(encoded_input[feature])) % 1000
 
-        input_df = pd.DataFrame([{col: encoded_input.get(col, 0) for col in model.feature_names_in_}])
-        ml_predicted_price = model.predict(input_df)[0]
+        # Debug: Show encoded input
+        st.write("Encoded input sample:", {k: v for k, v in list(encoded_input.items())[:5]})
+
+        # Get feature names safely
+        try:
+            if hasattr(model, 'feature_names_in_'):
+                feature_names = model.feature_names_in_
+            elif hasattr(model, 'feature_names_'):
+                feature_names = model.feature_names_
+            else:
+                # Fallback to keys from encoded_input
+                feature_names = list(encoded_input.keys())
+                st.warning("Using fallback feature names from input keys")
+        except Exception as e:
+            feature_names = list(encoded_input.keys())
+            st.warning(f"Error getting feature names: {str(e)}. Using input keys as fallback.")
+
+        st.write("Feature names:", feature_names[:10])  # Show first 10 features
+
+        # Prepare input dataframe
+        try:
+            # Ensure we only use features that exist in both encoded_input and feature_names
+            available_features = [f for f in feature_names if f in encoded_input]
+            missing_features = [f for f in feature_names if f not in encoded_input]
+            
+            if missing_features:
+                st.warning(f"Missing features: {missing_features}")
+                # Add missing features with default values
+                for feature in missing_features:
+                    encoded_input[feature] = 0
+            
+            input_df = pd.DataFrame([encoded_input])[feature_names]
+            st.write("Input DataFrame shape:", input_df.shape)
+            st.write("Input DataFrame preview:", input_df.head())
+            
+        except Exception as e:
+            st.error(f"Error creating input DataFrame: {str(e)}")
+            # Create a simple fallback DataFrame
+            try:
+                input_df = pd.DataFrame([encoded_input])
+                st.warning("Using simplified input DataFrame")
+            except Exception as e2:
+                st.error(f"Failed to create fallback DataFrame: {str(e2)}")
+                st.stop()
+
+        # Predict price
+        try:
+            ml_predicted_price = model.predict(input_df)[0]
+            st.success(f"ML prediction successful: {ml_predicted_price:,.0f}")
+        except Exception as e:
+            st.error(f"Error during prediction: {str(e)}")
+            # Use fallback calculation
+            ml_predicted_price = calculate_base_price_by_segments(
+                raw_input['make'], 
+                raw_input['model'], 
+                raw_input['engine_cc'], 
+                raw_input['age']
+            )
+            st.warning("Using fallback price calculation instead of ML prediction")
 
         # Use intelligent range calculation
         lower, upper = calculate_intelligent_range(raw_input, ml_predicted_price, df)
@@ -727,26 +848,38 @@ if submit_btn:
         )
 
         # Enhanced AI Description generation
-        prompt = (
-            f"You are an expert Pakistani car market analyst. Provide a detailed 5-6 line analysis of why a {2024 - raw_input['age']} "
-            f"{raw_input['make']} {raw_input['model']} ({raw_input['body']}) with {raw_input['mileage']:,} km mileage, "
-            f"{raw_input['engine_cc']}cc {raw_input['fuel_type']} engine, and "
-            f"{'automatic' if raw_input['is_automatic'] else 'manual'} transmission is intelligently valued between Rs. {lower:,} and Rs. {upper:,}. "
-            f"The expected mileage for this age would be {expected_mileage:,} km. "
-            f"Consider market positioning, demand trends, fuel efficiency, maintenance costs, and resale potential. "
-            f"Mention specific factors affecting this vehicle's pricing in Pakistan's current market."
-        )
+        try:
+            prompt = (
+                f"You are an expert Pakistani car market analyst. Provide a detailed 5-6 line analysis of why a {2024 - raw_input['age']} "
+                f"{raw_input['make']} {raw_input['model']} ({raw_input['body']}) with {raw_input['mileage']:,} km mileage, "
+                f"{raw_input['engine_cc']}cc {raw_input['fuel_type']} engine, and "
+                f"{'automatic' if raw_input['is_automatic'] else 'manual'} transmission is intelligently valued between Rs. {lower:,} and Rs. {upper:,}. "
+                f"The expected mileage for this age would be {expected_mileage:,} km. "
+                f"Consider market positioning, demand trends, fuel efficiency, maintenance costs, and resale potential. "
+                f"Mention specific factors affecting this vehicle's pricing in Pakistan's current market."
+            )
 
-        client = Groq(api_key=api_key)
-        response = client.chat.completions.create(
-            model="llama3-70b-8192",
-            messages=[
-                {"role": "system", "content": "You are a professional automotive market analyst specializing in Pakistan's used car market with deep knowledge of pricing trends, brand positioning, and consumer preferences."},
-                {"role": "user", "content": prompt}
-            ]
-        )
+            client = Groq(api_key=api_key)
+            response = client.chat.completions.create(
+                model="llama3-70b-8192",
+                messages=[
+                    {"role": "system", "content": "You are a professional automotive market analyst specializing in Pakistan's used car market with deep knowledge of pricing trends, brand positioning, and consumer preferences."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
 
-        description = response.choices[0].message.content
+            description = response.choices[0].message.content
+            
+        except Exception as e:
+            st.warning(f"AI description generation failed: {str(e)}")
+            description = f"""
+            Based on market analysis, this {2024 - raw_input['age']} {raw_input['make']} {raw_input['model']} 
+            represents good value in the Pakistani market. The {raw_input['engine_cc']}cc {raw_input['fuel_type']} engine 
+            provides {'excellent fuel efficiency' if raw_input['engine_cc'] < 1500 else 'good performance balance'}. 
+            With {'automatic' if raw_input['is_automatic'] else 'manual'} transmission and {raw_input['mileage']:,} km 
+            on the odometer, this vehicle falls within expected depreciation curves for its segment. 
+            The estimated price range reflects current market conditions and demand patterns for this model.
+            """
         
         # Enhanced description display
         st.markdown(
