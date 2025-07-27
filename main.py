@@ -12,10 +12,7 @@ import numpy as np
 load_dotenv()
 warnings.filterwarnings("ignore")
 
-api_key = os.getenv("GROQ_API_KEY")
-if not api_key:
-    api_key = ""  # Set empty string to avoid errors
-
+api_key = st.secrets.get("GROQ_API_KEY", "")
 # Load dataset
 df = pd.read_csv("pakwheels_used_cars.csv", encoding="utf-8")
 
