@@ -1,0 +1,8 @@
+streamlit
+gdown
+joblib
+pandas
+numpy
+fuzzywuzzy
+groq
+python-dotenv
