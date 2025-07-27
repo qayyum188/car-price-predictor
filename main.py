@@ -14,65 +14,9 @@ warnings.filterwarnings("ignore")
 
 api_key = os.getenv("GROQ_API_KEY")
 if not api_key:
-    raise Exception("GROQ_API_KEY not set! Please set it as an environment variable.")
+    api_key = ""  # Set empty string to avoid errors
 
-# === Load model and encoders ===
-import gdown
-import joblib
-import os
-
-@st.cache_resource
-def load_model_and_encoders():
-    # File IDs from Google Drive
-    model_file_id = "1RmP52eB544KHpKHknWyGkRQrMayljrOU"
-    encoders_file_id = "1RmP52eB544KHpKHknWyGkRQrMayljrOU"
-
-    model_url = f"https://drive.google.com/uc?id={model_file_id}"
-    encoders_url = f"https://drive.google.com/uc?id={encoders_file_id}"
-
-    # Define local paths
-    model_path = "optimized_car_model.pkl"
-    encoders_path = "label_encoders_15.pkl"
-
-    # Download files if not present
-    if not os.path.exists(model_path):
-        gdown.download(model_url, model_path, quiet=False)
-    if not os.path.exists(encoders_path):
-        gdown.download(encoders_url, encoders_path, quiet=False)
-
-    try:
-        model = joblib.load(model_path)
-        encoders = joblib.load(encoders_path)
-        
-        # Debug: Check what was actually loaded
-        st.write("Model type:", type(model))
-        st.write("Model has predict method:", hasattr(model, 'predict') if model else False)
-        
-        # If model is a dict, it might contain the actual model
-        if isinstance(model, dict):
-            st.write("Model is dict with keys:", list(model.keys()))
-            # Try to find the actual model in the dictionary
-            for key, value in model.items():
-                if hasattr(value, 'predict'):
-                    st.write(f"Found model with predict method at key: {key}")
-                    model = value
-                    break
-            else:
-                st.warning("No object with predict method found in model dict")
-                model = None
-        
-        return model, encoders
-        
-    except Exception as e:
-        st.error(f"Error loading model/encoders: {str(e)}")
-        return None, None
-
-model, encoders = load_model_and_encoders()
-
-# Check if loading was successful
-if model is None or encoders is None:
-    st.sidebar.error("⚠️ ML model unavailable - using intelligent calculations")
-
+# Load dataset
 df = pd.read_csv("pakwheels_used_cars.csv", encoding="utf-8")
 
 # === Intelligent Price Calculation Functions ===
@@ -564,7 +508,7 @@ with st.sidebar:
     st.markdown(
         """
         <p class="justified-text">
-        This intelligent car price estimator now uses advanced algorithms that consider market segments, brand positioning, depreciation curves, mileage patterns, and real-time market conditions. The system analyzes similar vehicles, applies smart depreciation models, and factors in transmission type, import status, and fuel efficiency to provide accurate, market-aware pricing ranges.
+        This intelligent car price estimator uses advanced algorithms that consider market segments, brand positioning, depreciation curves, mileage patterns, and real-time market conditions. The system analyzes similar vehicles, applies smart depreciation models, and factors in transmission type, import status, and fuel efficiency to provide accurate, market-aware pricing ranges.
         </p>
         """,
         unsafe_allow_html=True
@@ -683,7 +627,7 @@ if submit_btn:
             'body': correct_input(body, df['body'].unique())
         }
         
-        # Use intelligent base calculation instead of ML prediction
+        # Use intelligent base calculation
         ml_predicted_price = calculate_base_price_by_segments(
             raw_input['make'], 
             raw_input['model'], 
@@ -731,7 +675,6 @@ if submit_btn:
         # Check what columns are available in the dataset
         available_columns = list(df.columns)
         has_price_col = 'price' in available_columns
-        dataset_info = f"Dataset columns: {', '.join(available_columns[:5])}..." if len(available_columns) > 5 else f"Dataset columns: {', '.join(available_columns)}"
         
         st.markdown(
             f"""
@@ -741,7 +684,7 @@ if submit_btn:
                 </h3>
                 <div class='breakdown-content' style='color: #e0e0e0;'>
                     <strong>Base Price:</strong> Rs. {format_price(base_price)} | 
-                    <strong>ML Prediction:</strong> Rs. {format_price(int(ml_predicted_price))}<br>
+                    <strong>Intelligent Prediction:</strong> Rs. {format_price(int(ml_predicted_price))}<br>
                     <strong>Expected Mileage:</strong> {format_price(expected_mileage)} km | 
                     <strong>Actual:</strong> {format_price(raw_input['mileage'])} km 
                     {'⚠️' if raw_input['mileage'] > expected_mileage * 1.2 else '✅' if raw_input['mileage'] <= expected_mileage * 1.1 else '⭐'}<br>
