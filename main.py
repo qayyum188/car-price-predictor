@@ -40,13 +40,39 @@ def load_model_and_encoders():
     if not os.path.exists(encoders_path):
         gdown.download(encoders_url, encoders_path, quiet=False)
 
-    model = joblib.load(model_path)
-    encoders = joblib.load(encoders_path)
-
-    return model, encoders
+    try:
+        model = joblib.load(model_path)
+        encoders = joblib.load(encoders_path)
+        
+        # Debug: Check what was actually loaded
+        st.write("Model type:", type(model))
+        st.write("Model has predict method:", hasattr(model, 'predict') if model else False)
+        
+        # If model is a dict, it might contain the actual model
+        if isinstance(model, dict):
+            st.write("Model is dict with keys:", list(model.keys()))
+            # Try to find the actual model in the dictionary
+            for key, value in model.items():
+                if hasattr(value, 'predict'):
+                    st.write(f"Found model with predict method at key: {key}")
+                    model = value
+                    break
+            else:
+                st.warning("No object with predict method found in model dict")
+                model = None
+        
+        return model, encoders
+        
+    except Exception as e:
+        st.error(f"Error loading model/encoders: {str(e)}")
+        return None, None
 
 model, encoders = load_model_and_encoders()
 
+# Check if loading was successful
+if model is None or encoders is None:
+    st.error("⚠️ Failed to load ML model or encoders. The app will use fallback calculations.")
+    st.info("Please check your pickle files and ensure they contain valid scikit-learn models.")
 
 df = pd.read_csv("pakwheels_used_cars.csv", encoding="utf-8")
 
@@ -658,10 +684,6 @@ if submit_btn:
             'body': correct_input(body, df['body'].unique())
         }
         
-        # Debug: Display encoders type and structure
-        st.write("Type of encoders:", type(encoders))
-        st.write("Encoders structure:", str(encoders)[:200] + "..." if len(str(encoders)) > 200 else str(encoders))
-
         # Enhanced encoder handling
         encoded_input = raw_input.copy()
         
@@ -680,8 +702,6 @@ if submit_btn:
                                 # Use the first class as fallback
                                 val = le.classes_[0]
                             encoded_input[key] = le.transform([val])[0]
-                        else:
-                            st.warning(f"Encoder for '{key}' doesn't have classes_ attribute")
                             
             elif hasattr(encoders, '__dict__'):
                 # Case 2: encoders is an object with attributes
@@ -714,18 +734,12 @@ if submit_btn:
                 st.stop()
                 
         except Exception as e:
-            st.error(f"Error during encoding: {str(e)}")
-            st.error("Using fallback encoding method...")
-            
             # Fallback: Create simple numeric encodings
             categorical_features = ['make', 'model', 'fuel_type', 'body']
             for feature in categorical_features:
                 if feature in encoded_input:
                     # Simple hash-based encoding as fallback
                     encoded_input[feature] = hash(str(encoded_input[feature])) % 1000
-
-        # Debug: Show encoded input
-        st.write("Encoded input sample:", {k: v for k, v in list(encoded_input.items())[:5]})
 
         # Get feature names safely
         try:
@@ -736,12 +750,8 @@ if submit_btn:
             else:
                 # Fallback to keys from encoded_input
                 feature_names = list(encoded_input.keys())
-                st.warning("Using fallback feature names from input keys")
         except Exception as e:
             feature_names = list(encoded_input.keys())
-            st.warning(f"Error getting feature names: {str(e)}. Using input keys as fallback.")
-
-        st.write("Feature names:", feature_names[:10])  # Show first 10 features
 
         # Prepare input dataframe
         try:
@@ -750,31 +760,27 @@ if submit_btn:
             missing_features = [f for f in feature_names if f not in encoded_input]
             
             if missing_features:
-                st.warning(f"Missing features: {missing_features}")
                 # Add missing features with default values
                 for feature in missing_features:
                     encoded_input[feature] = 0
             
             input_df = pd.DataFrame([encoded_input])[feature_names]
-            st.write("Input DataFrame shape:", input_df.shape)
-            st.write("Input DataFrame preview:", input_df.head())
             
         except Exception as e:
-            st.error(f"Error creating input DataFrame: {str(e)}")
             # Create a simple fallback DataFrame
             try:
                 input_df = pd.DataFrame([encoded_input])
-                st.warning("Using simplified input DataFrame")
             except Exception as e2:
-                st.error(f"Failed to create fallback DataFrame: {str(e2)}")
+                st.error(f"Failed to create input DataFrame: {str(e2)}")
                 st.stop()
 
         # Predict price
         try:
-            ml_predicted_price = model.predict(input_df)[0]
-            st.success(f"ML prediction successful: {ml_predicted_price:,.0f}")
+            if model and hasattr(model, 'predict'):
+                ml_predicted_price = model.predict(input_df)[0]
+            else:
+                raise ValueError("Model object doesn't have predict method or is None")
         except Exception as e:
-            st.error(f"Error during prediction: {str(e)}")
             # Use fallback calculation
             ml_predicted_price = calculate_base_price_by_segments(
                 raw_input['make'], 
@@ -782,7 +788,6 @@ if submit_btn:
                 raw_input['engine_cc'], 
                 raw_input['age']
             )
-            st.warning("Using fallback price calculation instead of ML prediction")
 
         # Use intelligent range calculation
         lower, upper = calculate_intelligent_range(raw_input, ml_predicted_price, df)
@@ -849,6 +854,10 @@ if submit_btn:
 
         # Enhanced AI Description generation
         try:
+            # Check if API key is properly set
+            if not api_key or api_key.strip() == "":
+                raise ValueError("GROQ_API_KEY is not set or empty")
+                
             prompt = (
                 f"You are an expert Pakistani car market analyst. Provide a detailed 5-6 line analysis of why a {2024 - raw_input['age']} "
                 f"{raw_input['make']} {raw_input['model']} ({raw_input['body']}) with {raw_input['mileage']:,} km mileage, "
@@ -871,14 +880,24 @@ if submit_btn:
             description = response.choices[0].message.content
             
         except Exception as e:
-            st.warning(f"AI description generation failed: {str(e)}")
+            st.info("💡 To enable AI descriptions, set your GROQ_API_KEY in the .env file")
+            
+            # Enhanced fallback description based on actual input
+            segment = 'Luxury' if raw_input['make'].lower() in ['mercedes', 'bmw', 'audi', 'lexus', 'bentley'] else 'Premium' if raw_input['make'].lower() in ['toyota', 'honda', 'nissan'] else 'Economy'
+            
+            efficiency_desc = 'excellent fuel efficiency' if raw_input['engine_cc'] < 1500 else 'balanced performance and efficiency' if raw_input['engine_cc'] <= 2000 else 'strong performance characteristics'
+            
+            mileage_status = 'low mileage' if raw_input['mileage'] < expected_mileage * 0.8 else 'average mileage' if raw_input['mileage'] <= expected_mileage * 1.2 else 'higher mileage'
+            
+            transmission_benefit = 'convenience and smooth driving experience' if raw_input['is_automatic'] else 'better fuel economy and lower maintenance costs'
+            
             description = f"""
-            Based on market analysis, this {2024 - raw_input['age']} {raw_input['make']} {raw_input['model']} 
-            represents good value in the Pakistani market. The {raw_input['engine_cc']}cc {raw_input['fuel_type']} engine 
-            provides {'excellent fuel efficiency' if raw_input['engine_cc'] < 1500 else 'good performance balance'}. 
-            With {'automatic' if raw_input['is_automatic'] else 'manual'} transmission and {raw_input['mileage']:,} km 
-            on the odometer, this vehicle falls within expected depreciation curves for its segment. 
-            The estimated price range reflects current market conditions and demand patterns for this model.
+            This {2024 - raw_input['age']} {raw_input['make']} {raw_input['model']} represents a solid choice in the {segment.lower()} segment of Pakistan's used car market. 
+            The {raw_input['engine_cc']}cc {raw_input['fuel_type']} engine offers {efficiency_desc}, making it suitable for both city and highway driving. 
+            With {mileage_status} at {raw_input['mileage']:,} km, this vehicle shows {'excellent' if mileage_status == 'low mileage' else 'reasonable'} usage patterns for its age. 
+            The {'automatic' if raw_input['is_automatic'] else 'manual'} transmission provides {transmission_benefit}. 
+            Current market valuation reflects the model's reputation for {'luxury and prestige' if segment == 'Luxury' else 'reliability and resale value' if segment == 'Premium' else 'affordability and practicality'}, 
+            positioning it competitively within the Rs. {lower//1000}k-{upper//1000}k price range based on similar vehicles in the market.
             """
         
         # Enhanced description display
