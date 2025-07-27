@@ -3,6 +3,5 @@ gdown
 joblib
 pandas
 numpy
-fuzzywuzzy
-groq
-python-dotenv
+scikit-learn
+xgboost         # Include this if you trained the model using XGBoost
