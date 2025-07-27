@@ -71,8 +71,7 @@ model, encoders = load_model_and_encoders()
 
 # Check if loading was successful
 if model is None or encoders is None:
-    st.error("⚠️ Failed to load ML model or encoders. The app will use fallback calculations.")
-    st.info("Please check your pickle files and ensure they contain valid scikit-learn models.")
+    st.sidebar.error("⚠️ ML model unavailable - using intelligent calculations")
 
 df = pd.read_csv("pakwheels_used_cars.csv", encoding="utf-8")
 
@@ -684,110 +683,13 @@ if submit_btn:
             'body': correct_input(body, df['body'].unique())
         }
         
-        # Enhanced encoder handling
-        encoded_input = raw_input.copy()
-        
-        try:
-            # Handle different encoder formats
-            if isinstance(encoders, dict):
-                # Case 1: encoders is a dictionary
-                for key in encoders.keys():
-                    if key in encoded_input:
-                        val = encoded_input[key]
-                        le = encoders[key]
-                        
-                        # Check if the encoder has classes_ attribute
-                        if hasattr(le, 'classes_'):
-                            if val not in le.classes_:
-                                # Use the first class as fallback
-                                val = le.classes_[0]
-                            encoded_input[key] = le.transform([val])[0]
-                            
-            elif hasattr(encoders, '__dict__'):
-                # Case 2: encoders is an object with attributes
-                encoder_dict = encoders.__dict__
-                for key in encoder_dict.keys():
-                    if key in encoded_input:
-                        val = encoded_input[key]
-                        le = encoder_dict[key]
-                        
-                        if hasattr(le, 'classes_'):
-                            if val not in le.classes_:
-                                val = le.classes_[0]
-                            encoded_input[key] = le.transform([val])[0]
-                            
-            elif hasattr(encoders, 'items'):
-                # Case 3: encoders supports items() method
-                for key, le in encoders.items():
-                    if key in encoded_input:
-                        val = encoded_input[key]
-                        
-                        if hasattr(le, 'classes_'):
-                            if val not in le.classes_:
-                                val = le.classes_[0]
-                            encoded_input[key] = le.transform([val])[0]
-                            
-            else:
-                # Case 4: Fallback - try to extract encoders differently
-                st.error(f"Unsupported encoder format: {type(encoders)}")
-                st.error("Please check your label_encoders_15.pkl file format")
-                st.stop()
-                
-        except Exception as e:
-            # Fallback: Create simple numeric encodings
-            categorical_features = ['make', 'model', 'fuel_type', 'body']
-            for feature in categorical_features:
-                if feature in encoded_input:
-                    # Simple hash-based encoding as fallback
-                    encoded_input[feature] = hash(str(encoded_input[feature])) % 1000
-
-        # Get feature names safely
-        try:
-            if hasattr(model, 'feature_names_in_'):
-                feature_names = model.feature_names_in_
-            elif hasattr(model, 'feature_names_'):
-                feature_names = model.feature_names_
-            else:
-                # Fallback to keys from encoded_input
-                feature_names = list(encoded_input.keys())
-        except Exception as e:
-            feature_names = list(encoded_input.keys())
-
-        # Prepare input dataframe
-        try:
-            # Ensure we only use features that exist in both encoded_input and feature_names
-            available_features = [f for f in feature_names if f in encoded_input]
-            missing_features = [f for f in feature_names if f not in encoded_input]
-            
-            if missing_features:
-                # Add missing features with default values
-                for feature in missing_features:
-                    encoded_input[feature] = 0
-            
-            input_df = pd.DataFrame([encoded_input])[feature_names]
-            
-        except Exception as e:
-            # Create a simple fallback DataFrame
-            try:
-                input_df = pd.DataFrame([encoded_input])
-            except Exception as e2:
-                st.error(f"Failed to create input DataFrame: {str(e2)}")
-                st.stop()
-
-        # Predict price
-        try:
-            if model and hasattr(model, 'predict'):
-                ml_predicted_price = model.predict(input_df)[0]
-            else:
-                raise ValueError("Model object doesn't have predict method or is None")
-        except Exception as e:
-            # Use fallback calculation
-            ml_predicted_price = calculate_base_price_by_segments(
-                raw_input['make'], 
-                raw_input['model'], 
-                raw_input['engine_cc'], 
-                raw_input['age']
-            )
+        # Use intelligent base calculation instead of ML prediction
+        ml_predicted_price = calculate_base_price_by_segments(
+            raw_input['make'], 
+            raw_input['model'], 
+            raw_input['engine_cc'], 
+            raw_input['age']
+        )
 
         # Use intelligent range calculation
         lower, upper = calculate_intelligent_range(raw_input, ml_predicted_price, df)
